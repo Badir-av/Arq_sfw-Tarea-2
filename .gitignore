@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+
+# Bases de datos locales
+data/
+
+# Certificados y llaves generados localmente
+certs/*.pem
