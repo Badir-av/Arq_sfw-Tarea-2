@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package urlshortener.log.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// Servicio Log de la arquitectura 1: recibe un evento por cada visita a una
+// URL corta para alimentar la analítica.
+service LogService {
+  rpc RecordUrlHit(UrlHit) returns (UrlHitAck);
+}
+
+message UrlHit {
+  // Momento en que el Shortener recibió el GET.
+  google.protobuf.Timestamp timestamp = 1;
+  // URL corta que visitó el navegador.
+  string short_url = 2;
+  // URL original a la que fue redirigido.
+  string long_url = 3;
+}
+
+message UrlHitAck {}

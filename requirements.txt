@@ -1,0 +1,6 @@
+litestar>=2.12,<3
+uvicorn>=0.30
+pybase62>=1.0
+grpcio>=1.66
+grpcio-tools>=1.66
+cryptography>=43
