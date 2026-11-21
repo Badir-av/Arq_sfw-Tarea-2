@@ -26,12 +26,12 @@ def redirect_to_long_url(
     if found is None:
         raise NotFoundException(detail=f"No existe la URL corta '{url_hash}'")
 
-    # 302: el navegador no guarda la redirección, así que cada visita vuelve a
-    # pasar por aquí y puede contarse. El hit se envía después de responder
-    # para no sumar la latencia del Log a la redirección.
+    # El hit se envía después de responder para mantener la llamada al Log
+    # fuera de la latencia de la redirección.
     return Redirect(
         path=found.long_url,
         status_code=HTTP_302_FOUND,
+        headers={"Cache-Control": "no-store"},
         background=BackgroundTask(
             hits.publish,
             timestamp=datetime.now(timezone.utc),
