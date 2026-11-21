@@ -49,8 +49,16 @@ Los comandos de este documento son para Windows PowerShell.
 ```powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 python scripts/gen_certs.py
+```
+
+Si `py -3.11` no encuentra Python y ya tienes `uv`, usa estos comandos para crear `.venv`
+y continúa desde `Activate.ps1`.
+
+```powershell
+uv python install 3.11
+uv venv --managed-python --python 3.11 --seed .venv
 ```
 
 `scripts/gen_certs.py` crea `certs/cert.pem` y `certs/key.pem`, un certificado autofirmado
@@ -70,7 +78,22 @@ python -m arch1.log_service     # Terminal 1: Log gRPC en 127.0.0.1:50051
 python -m arch1.shortener       # Terminal 2: Shortener v1 en https://localhost:8443
 ```
 
+Si el puerto gRPC `50051` está ocupado, elige un puerto local libre, por ejemplo `50053`.
+Configura el mismo puerto en ambas terminales antes de iniciar cada proceso.
 
+**Terminal 1, servicio Log**
+
+```powershell
+$env:LOG_GRPC_ADDRESS = "127.0.0.1:50053"
+python -m arch1.log_service
+```
+
+**Terminal 2, Shortener v1**
+
+```powershell
+$env:LOG_GRPC_TARGET = "127.0.0.1:50053"
+python -m arch1.shortener
+```
 
 ### Arquitectura 2
 
@@ -162,60 +185,72 @@ python -c "import sqlite3; [print(r) for r in sqlite3.connect('data/arch1/log.db
 
 ## Cómo verificar cada requisito
 
-Los pasos asumen bases de datos nuevas, de modo que el primer hash generado sea `eRgfR`. Si ya se
-crearon URLs antes, basta usar el hash que devuelva el POST, o borrar la carpeta `data/` con los
-servicios detenidos para partir de cero.
+Usa el `short_url` devuelto por el POST en cada prueba. En una base de datos nueva, la primera
+URL recibe el ID `597652313` y el hash `eRgfR`.
 
 ### Arquitectura 1
 
 Con el Log y el Shortener v1 levantados, en una tercera terminal:
 
-1. Crear una URL corta con el POST de la sección [Uso](#uso). La respuesta trae el hash `eRgfR`,
-  que es `597652313` en base62.
-2. Visitarla dos veces y comprobar el código 302:
-  ```powershell
-   curl.exe -k -i https://localhost:8443/eRgfR
-   curl.exe -k -i https://localhost:8443/eRgfR
-  ```
-   Cada respuesta es `HTTP/1.1 302 Found` con el header `location` apuntando a la URL original.
-   En la terminal del Log aparece una línea `hit <timestamp> <url corta> -> <url original>` por
-   cada visita.
-3. Comprobar el id inicial y que los hits quedaron guardados:
-  ```powershell
+1. Crear una URL corta con el POST de la sección [Uso](#uso) en el puerto `8443` y copiar el valor
+   de `short_url`.
+2. Guardar la URL devuelta en `$shortUrl` y visitarla dos veces.
+
+   ```powershell
+   $shortUrl = 'https://localhost:8443/eRgfR' # Reemplaza por el short_url del POST.
+   curl.exe -k -i $shortUrl
+   curl.exe -k -i $shortUrl
+   ```
+
+   Cada respuesta es `HTTP/1.1 302 Found` con `Location` apuntando a la URL original y
+   `Cache-Control: no-store`. En la terminal del Log aparece una línea
+   `hit <timestamp> <url corta> -> <url original>` por cada visita.
+3. Comprobar el registro de la URL y los hits guardados.
+
+   ```powershell
    python -c "import sqlite3; [print(r) for r in sqlite3.connect('data/arch1/shortener.db').execute('select * from urls')]"
    python -c "import sqlite3; [print(r) for r in sqlite3.connect('data/arch1/log.db').execute('select * from url_hits')]"
-  ```
-   La primera muestra la tupla `(597652313, 'eRgfR', <url original>)`. La segunda muestra una fila
-   por visita, con su timestamp y ambas URLs.
-4. Comprobar que el certificado es autofirmado: el mismo GET sin `-k` falla con un error de
-  certificado no confiable.
-5. Opcional: detener el Log con `Ctrl+C` y repetir el GET. La respuesta sigue siendo 302 y, unos
-  2 segundos después, la terminal del Shortener muestra la advertencia
-   `No se pudo registrar el hit`.
+   ```
+
+   La primera consulta muestra el ID, el hash y la URL original. La segunda muestra una fila por
+   hit registrado, con su timestamp y ambas URLs.
+4. Repetir el GET sin `-k` para comprobar el certificado. Si el certificado autofirmado no está en
+   el almacén de confianza del sistema, la conexión falla.
+5. Como prueba opcional, detener el Log con `Ctrl+C` y repetir el GET. La respuesta sigue siendo
+   `302` y el Shortener emite la advertencia `No se pudo registrar el hit`.
 
 
 
 ### Arquitectura 2
 
-1. Levantar el Shortener v2 con un límite bajo, para ver el rate limiter con pocas peticiones:
-  ```powershell
-   $env:RATE_LIMIT_PER_MINUTE = "5"; python -m arch2.shortener
-  ```
-2. En otra terminal, crear una URL corta con el POST de la sección [Uso](#uso), usando el puerto
-  1. La respuesta incluye los headers `ratelimit-limit: 5` y `ratelimit-remaining: 4`.
-3. Hacer 6 visitas seguidas:
-  ```powershell
-   1..6 | ForEach-Object { curl.exe -k -s -o NUL -w "%{http_code}\n" https://localhost:8444/eRgfR }
-  ```
-   Se obtiene `301` cuatro veces y luego `429` dos veces: el POST ya había consumido una de las 5
-   peticiones del minuto.
-4. Ver la respuesta completa. Dentro del mismo minuto es un `429 Too Many Requests` con
-  `ratelimit-remaining: 0`; pasado el minuto vuelve a ser `301 Moved Permanently`.
-5. Caché del servidor: no se distingue desde fuera, porque la respuesta es la misma venga o no
-  del caché. Está configurado en `arch2/shortener/app.py`, con `cache=True` en el handler del
-   GET y `ResponseCacheConfig` en la aplicación.
-6. Caché del navegador: abrir `https://localhost:8444/eRgfR` dos veces en un navegador. La segunda
-  visita no debería aparecer en la terminal del Shortener v2, porque el navegador guardó el 301.
+1. Levantar el Shortener v2 con un límite de cinco peticiones por minuto.
+
+   ```powershell
+   $env:RATE_LIMIT_PER_MINUTE = "5"
+   python -m arch2.shortener
+   ```
+
+2. En otra terminal, crear una URL corta con el POST de la sección [Uso](#uso) en el puerto `8444`.
+   La respuesta incluye `ratelimit-limit: 5` y `ratelimit-remaining: 4` si es la primera petición
+   de esa IP en la ventana. Copiar el `short_url` de la respuesta.
+3. Guardar la URL devuelta en `$shortUrl` y hacer seis GET seguidos desde la misma IP, dentro de
+   la misma ventana que el POST.
+
+   ```powershell
+   $shortUrl = 'https://localhost:8444/eRgfR' # Reemplaza por el short_url del POST.
+   1..6 | ForEach-Object { curl.exe -k -s -o NUL -w "%{http_code}\n" $shortUrl }
+   ```
+
+   El POST consume una de las cinco peticiones. Los cuatro primeros GET devuelven `301` y los
+   dos siguientes devuelven `429`.
+4. Ejecutar `curl.exe -k -i $shortUrl` para ver los encabezados. Con el cupo agotado, la respuesta
+   es `429 Too Many Requests` con `ratelimit-remaining: 0`. Cuando expira la ventana, vuelve a `301`.
+5. El caché del servidor está en `arch2/shortener/app.py`, con `cache=True` en el GET y
+   `ResponseCacheConfig` en la aplicación. Para comprobarlo, cuenta las llamadas a
+   `find_by_hash` al repetir el mismo GET dentro del TTL y con cupo disponible.
+6. Para observar el caché del navegador, abre dos veces el `short_url` con el caché habilitado y
+   sin recarga forzada. Si el navegador reutiliza el `301`, el Shortener v2 recibe solo la primera
+   petición.
 
 
 
@@ -226,7 +261,7 @@ Con el Log y el Shortener v1 levantados, en una tercera terminal:
 | ----------------------------------------------- | ---------------------------------------------------------------- |
 | POST devuelve la URL corta                      | Respuesta `201` con `short_url`                                  |
 | Id inicial `597652313` y hash base62            | Primer hash `eRgfR` y fila en `shortener.db`                     |
-| Arquitectura 1: redirección 302                 | `HTTP/1.1 302 Found` con `location`                              |
+| Arquitectura 1: redirección 302                 | `HTTP/1.1 302 Found` con `Location` y `Cache-Control: no-store`  |
 | Arquitectura 1: evento gRPC con timestamp y URL | Línea en la terminal del Log y fila en `log.db` por cada visita  |
 | Arquitectura 2: redirección 301                 | `HTTP/1.1 301 Moved Permanently` con `location`                  |
 | Arquitectura 2: rate limiter                    | Headers `ratelimit-*` y `429` al superar el límite               |
@@ -253,6 +288,8 @@ su propia Shortener DB, tal como en los diagramas.
 
 **Arquitectura 1**
 
+- El `302` incluye `Cache-Control: no-store` para indicar a navegadores y cachés HTTP
+  intermedios que no almacenen la redirección.
 - El evento "url hit" contiene el timestamp en que se recibió el GET, la URL corta visitada y la
 URL original. El contrato está en `arch1/proto/url_hit.proto`.
 - El hit se envía después de responder la redirección, para que la latencia del Log no afecte al
