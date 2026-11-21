@@ -86,10 +86,13 @@ Los ejemplos usan el puerto 8443 (arquitectura 1). Para la arquitectura 2 basta 
 La opción `-k` hace que `curl` acepte el certificado autofirmado. Se usa `curl.exe` porque en
 Windows PowerShell `curl` a secas es un alias de otro comando.
 
-Acortar una URL:
+En PowerShell 7.7.0, usa `ConvertTo-Json` para generar el cuerpo y envíalo por la entrada
+estándar de `curl.exe`. Así el JSON conserva las comillas de sus claves y valores.
 
 ```powershell
-curl.exe -k -X POST https://localhost:8443/shorten -H "Content-Type: application/json" -d '{\"url\": \"usm.cl/informatica/postulaciones-a-postgrado/2025/magiste-en-ingenieria-informatica/\"}'
+@{ url = 'usm.cl/informatica/postulaciones-a-postgrado/2025/magiste-en-ingenieria-informatica/' } |
+    ConvertTo-Json -Compress |
+    curl.exe -k -i 'https://localhost:8443/shorten' -H 'Content-Type: application/json' --data-binary '@-'
 ```
 
 Respuesta (`201 Created`):
