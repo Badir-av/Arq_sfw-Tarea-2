@@ -37,7 +37,7 @@ Discussion.md         Discusión de trade-offs y bonus
 
 ## Pre-requisitos
 
-- Python 3.11 (probado con Python 3.11.9 en Windows).
+- Python 3.11 o superior (probado con Python 3.11.9 y 3.15 en Windows).
 - `curl` para probar los endpoints (en Windows viene incluido como `curl.exe`).
 
 No se necesita Docker, `openssl` ni un motor de base de datos externo.
@@ -47,7 +47,7 @@ No se necesita Docker, `openssl` ni un motor de base de datos externo.
 Los comandos de este documento son para Windows PowerShell.
 
 ```powershell
-py -3.11 -m venv .venv
+py -3 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 python scripts/gen_certs.py
