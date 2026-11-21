@@ -8,7 +8,7 @@ URL shortener implementado con dos arquitecturas sobre LiteStar.
 | Nombre         | Rol         |
 | -------------- | ----------- |
 | Badir Villegas | 202273020-K |
-
+| Yohanns Jara | 201830035-7 |
 
 ## Qué contiene
 
