@@ -37,23 +37,24 @@ Discussion.md         Discusión de trade-offs y bonus
 
 ## Pre-requisitos
 
-- Python 3.11 (probado con Python 3.11.9 en Windows).
+- Python 3.11 o superior (probado con Python 3.11.9 y 3.15 en Windows).
 - `curl` para probar los endpoints (en Windows viene incluido como `curl.exe`).
 
 No se necesita Docker, `openssl` ni un motor de base de datos externo.
 
 ## Instalación
 
-Los comandos de este documento son para Windows PowerShell.
+Los comandos de este documento son para Windows PowerShell. `py -3 --version` muestra la
+versión predeterminada que usará el launcher. Verifica que sea Python 3.11 o superior.
 
 ```powershell
-py -3.11 -m venv .venv
+py -3 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 python scripts/gen_certs.py
 ```
 
-Si `py -3.11` no encuentra Python y ya tienes `uv`, usa estos comandos para crear `.venv`
+Si `py` no encuentra una versión compatible y ya tienes `uv`, crea `.venv` con Python 3.11
 y continúa desde `Activate.ps1`.
 
 ```powershell
